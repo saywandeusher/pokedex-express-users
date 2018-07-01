@@ -11,10 +11,11 @@
 const express = require('express');
 const methodOverride = require('method-override');
 const pg = require('pg');
+const sha256 = require('js-sha256');
 
 // Initialise postgres client
 const config = {
-  user: 'ck',
+  user: 'saywan',
   host: '127.0.0.1',
   database: 'pokemons',
   port: 5432,
@@ -94,9 +95,8 @@ const getPokemon = (request, response) => {
 
 const postPokemon = (request, response) => {
   let params = request.body;
-  
-  const queryString = 'INSERT INTO pokemon(name, height) VALUES($1, $2);';
-  const values = [params.name, params.height];
+  const queryString = 'INSERT INTO pokemon(num, name, img, weight, height, user_id) VALUES($1, $2, $3, $4 ,$5, $6)';
+  const values = [params.num, params.name, params.img, params.weight + ' kg', params.height +' m', request.cookies('user_id')];
 
   pool.query(queryString, values, (err, result) => {
     if (err) {
@@ -144,12 +144,98 @@ const updatePokemon = (request, response) => {
 }
 
 const deletePokemonForm = (request, response) => {
-  response.send("COMPLETE ME");
+      response.redirect('/pokemon/'+req.params.id);
 }
 
 const deletePokemon = (request, response) => {
-  response.send("COMPLETE ME");
+
+  const queryString = 'DELETE from pokemon WHERE id =' + request.params.id;
+  pool.query(queryString, (err, res) => {
+    if (err) {
+      console.log('Query error ', err.stack);
+    } else {
+      console.log('Query result:', res);
+
+      // redirect to home page
+      response.send("COMPLETE ME");
+      response.redirect('/');
+
+    }
+  });
 }
+
+//Create User
+const createForm = (request, response) => {
+  response.render('userCreation');
+}
+
+const createUser = (request, response) => {
+
+  const queryString = 'INSERT INTO users(email, password) VALUES($1, $2) RETURNING *';
+  const values = [request.body.email, sha256(request.body.password)];
+
+  pool.query(queryString, values, (err, result) => {
+    if (err) {
+      console.log('query error:', err.stack);
+    } else {
+      console.log('query result:', result);
+
+      let user_id = result.rows[0].id;
+
+      response.cookie('logged_in', 'true');
+      response.cookie('user_id', user_id);
+      // redirect to home page
+      response.redirect('/');
+    }
+  });
+};
+
+//Login
+const loginForm = (request, response) => {
+    response.render('login');
+};
+
+const userLogin = (request, response) => {
+
+    let queryText = 'SELECT * FROM users WHERE email=$1';
+
+    const values = [request.body.email];
+
+    pool.query(queryText, values, (err, result) => {
+        if( err ){
+            response.send('db error: '+ err.message)
+        }else{
+
+            const queryRows = result.rows;
+
+            if( queryRows.length < 1){
+                response.send(401);
+            }else{
+
+                let db_pass_hash = queryRows[0].password;
+
+                let request_pass_hash = sha256( request.body.password );
+
+                if( db_pass_hash ===  request_pass_hash ){
+
+                    response.cookie('logged_in', 'true');
+                    response.cookie('user_id', queryRows[0].id);
+                    response.send("Welcome "+queryRows[0].email);
+                }else{
+                    response.status(401).send('nope');
+
+                }
+            }
+        }
+    });
+};
+
+//Log out
+const userLogout = (request, response) => {
+  response.clearCookie('user_id');
+  response.clearCookie('logged_in');
+  response.redirect('/users/login');
+};
 /**
  * ===================================
  * Routes
@@ -170,8 +256,13 @@ app.put('/pokemon/:id', updatePokemon);
 app.delete('/pokemon/:id', deletePokemon);
 
 // TODO: New routes for creating users
+app.get('/users/new', createForm);
+app.post('/users/new', createUser);
 
+app.get('/users/login', loginForm);
+app.post('/users/login', userLogin)
 
+app.get('/users/logout', userLogout);
 /**
  * ===================================
  * Listen to requests on port 3000
