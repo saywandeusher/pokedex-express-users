@@ -12,6 +12,7 @@ const express = require('express');
 const methodOverride = require('method-override');
 const pg = require('pg');
 const sha256 = require('js-sha256');
+const cookieParser = require('cookie-parser');
 
 // Initialise postgres client
 const config = {
@@ -42,6 +43,7 @@ const app = express();
 
 app.use(express.urlencoded({ extended: true }));
 app.use(methodOverride('_method'));
+app.use(cookieParser());
 
 
 // Set react-views to be the default view engine
@@ -95,8 +97,10 @@ const getPokemon = (request, response) => {
 
 const postPokemon = (request, response) => {
   let params = request.body;
+  let userId = request.cookies['user_id'];
+  console.log(userId);
   const queryString = 'INSERT INTO pokemon(num, name, img, weight, height, user_id) VALUES($1, $2, $3, $4 ,$5, $6)';
-  const values = [params.num, params.name, params.img, params.weight + ' kg', params.height +' m', request.cookies('user_id')];
+  const values = [params.num, params.name, params.img, params.weight + ' kg', params.height +' m', userId];
 
   pool.query(queryString, values, (err, result) => {
     if (err) {
@@ -143,21 +147,14 @@ const updatePokemon = (request, response) => {
   });
 }
 
-const deletePokemonForm = (request, response) => {
-      response.redirect('/pokemon/'+req.params.id);
-}
-
 const deletePokemon = (request, response) => {
 
   const queryString = 'DELETE from pokemon WHERE id =' + request.params.id;
-  pool.query(queryString, (err, res) => {
+  pool.query(queryString, (err, result) => {
     if (err) {
       console.log('Query error ', err.stack);
     } else {
-      console.log('Query result:', res);
-
       // redirect to home page
-      response.send("COMPLETE ME");
       response.redirect('/');
 
     }
@@ -247,13 +244,13 @@ app.get('/', getRoot);
 app.get('/pokemon/:id/edit', editPokemonForm);
 app.get('/pokemon/new', getNew);
 app.get('/pokemon/:id', getPokemon);
-app.get('/pokemon/:id/delete', deletePokemonForm);
+app.get('/pokemon/:id/delete', deletePokemon);
 
 app.post('/pokemon', postPokemon);
 
 app.put('/pokemon/:id', updatePokemon);
 
-app.delete('/pokemon/:id', deletePokemon);
+app.delete('/pokemon/:id/delete', deletePokemon);
 
 // TODO: New routes for creating users
 app.get('/users/new', createForm);
